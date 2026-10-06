@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoNexus - Hatfield Campus Navigator</title>
+    
+    <!-- QRCode.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        :root {
+            --navy: #021B39;
+            --dark-blue: #072A4A;
+            --cyan: #4DB6D9;
+            --teal: #2FC7A5;
+            --mint: #61D6B3;
+            --white: #F5F7FA;
+            --text: #17221d;
+            --muted: #6A7A89;
+            --danger: #b42318;
+            --card-bg: #FFFFFF;
+            --border-color: #E2E8F0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body, html {
+            height: 100%;
+            width: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            background-color: var(--navy);
+            color: var(--text);
+        }
+
+        /* Top Header Navbar */
+        .navbar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: rgba(2, 27, 57, 0.85);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            border-bottom: 1px solid rgba(77, 182, 217, 0.2);
+        }
+
+        .brand-title {
+            color: var(--white);
+            font-size: 18px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .brand-title span {
+            color: var(--cyan);
+            font-weight: 400;
+            font-size: 14px;
+        }
+
+        .nav-btn {
+            background: linear-gradient(135deg, var(--teal), var(--mint));
+            color: var(--navy);
+            border: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(47, 199, 165, 0.3);
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(47, 199, 165, 0.4);
+        }
+
+        /* Fullscreen 3D View Frame */
+        #view3d-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #view3d-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* Side Info Panel for 3D Building Selection */
+        .info-sidebar {
+            position: absolute;
+            top: 76px;
+            left: 16px;
+            width: 320px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            z-index: 50;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        .info-sidebar.hidden {
+            transform: translateX(-350px);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .info-sidebar h3 {
+            color: var(--navy);
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+
+        .info-sidebar p {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .close-sidebar-btn {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            background: none;
+            border: none;
+            font-size: 16px;
+            color: var(--muted);
+            cursor: pointer;
+        }
+
+        /* Navigation Dialog Modal Overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(2, 27, 57, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Navigation Card inside Modal */
+        .card { 
+            background: var(--card-bg); 
+            width: 100%;
+            max-width: 440px; 
+            padding: 32px 28px; 
+            border-radius: 16px; 
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+
+        .close-modal-btn {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            background: transparent;
+            border: none;
+            font-size: 20px;
+            color: var(--muted);
+            cursor: pointer;
+        }
+
+        .card-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .brand-subtitle {
+            color: var(--cyan);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 4px;
+        }
+
+        .card-header h2 { 
+            color: var(--navy);
+            font-size: 22px;
+            font-weight: 800;
+        }
+
+        #warning { 
+            display: none; 
+            background: #FFFBEB; 
+            color: #92400E; 
+            border: 1px solid #FCD34D;
+            padding: 10px 12px; 
+            border-radius: 8px; 
+            font-size: 12px; 
+            line-height: 1.4;
+            margin-bottom: 16px; 
+        }
+
+        .form-group {
+            position: relative;
+            margin-bottom: 14px;
+        }
+
+        label { 
+            display: block; 
+            text-align: left; 
+            font-size: 12px; 
+            font-weight: 700;
+            color: var(--muted); 
+            margin-bottom: 4px;
+            text-transform: uppercase;
+        }
+
+        input { 
+            width: 100%; 
+            padding: 10px 14px; 
+            border: 2px solid var(--border-color); 
+            border-radius: 8px; 
+            font-size: 14px; 
+            color: var(--text);
+            background-color: var(--white);
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--teal);
+            background-color: #FFFFFF;
+            box-shadow: 0 0 0 3px rgba(47, 199, 165, 0.15);
+        }
+
+        .swap-btn {
+            background: transparent;
+            border: none;
+            color: var(--cyan);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin: -6px 0 8px auto;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .swap-btn:hover {
+            background: rgba(77, 182, 217, 0.1);
+        }
+
+        button.primary-btn { 
+            width: 100%; 
+            padding: 12px; 
+            background: linear-gradient(135deg, var(--teal), var(--mint)); 
+            color: var(--navy); 
+            border: none; 
+            border-radius: 8px; 
+            font-size: 15px; 
+            font-weight: 700; 
+            cursor: pointer; 
+            margin-top: 6px; 
+            box-shadow: 0 4px 12px rgba(47, 199, 165, 0.3);
+            transition: transform 0.1s ease;
+        }
+
+        button.primary-btn:hover { 
+            transform: translateY(-1px);
+        }
+
+        button.primary-btn:disabled { 
+            background: var(--muted); 
+            opacity: 0.6;
+            cursor: not-allowed; 
+            transform: none;
+            box-shadow: none;
+        }
+
+        #message { 
+            margin-top: 12px; 
+            font-size: 13px; 
+            font-weight: 500;
+            text-align: center;
+            padding: 6px;
+            border-radius: 6px;
+        }
+
+        #message.error { 
+            color: var(--danger); 
+            background-color: rgba(180, 35, 24, 0.08);
+        }
+
+        #message.success {
+            color: var(--dark-blue);
+            background-color: rgba(97, 214, 179, 0.2);
+        }
+
+        #qrCodeContainer { 
+            display: none; 
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px dashed var(--border-color);
+            text-align: center;
+        }
+
+        #qrCodeContainer p { 
+            color: var(--muted); 
+            font-size: 12px; 
+            margin-bottom: 12px;
+        }
+
+        #qrcode { 
+            display: inline-block; 
+            padding: 10px;
+            background: #FFFFFF;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top Navigation Header -->
+    <header class="navbar">
+        <div class="brand-title">GeoNexus <span>Hatfield 3D View</span></div>
+        <button class="nav-btn" id="openNavBtn">
+            🗺️ Open Navigation
+        </button>
+    </header>
+
+    <!-- QGIS2threejs 3D Web View Frame -->
+    <div id="view3d-container">
+        <!-- Point this src to your QGIS2threejs exported html file in static/ folder -->
+        <iframe id="view3d-frame" src="hatfield_3d.html" title="3D Campus Map"></iframe>
+    </div>
+
+    <!-- Side Panel displaying Building Info on 3D Selection -->
+    <div class="info-sidebar hidden" id="buildingInfoSidebar">
+        <button class="close-sidebar-btn" id="closeSidebarBtn">✕</button>
+        <h3 id="buildingTitle">Building Details</h3>
+        <p id="buildingDescription">Select a building on the 3D map to view detailed information.</p>
+    </div>
+
+    <!-- Routing / QR Code Modal Dialog -->
+    <div class="modal-overlay" id="navModal">
+        <div class="card">
+            <button class="close-modal-btn" id="closeNavBtn">✕</button>
+            <div class="card-header">
+                <div class="brand-subtitle">GeoNexus Router</div>
+                <h2>Campus Navigation</h2>
+            </div>
+
+            <div id="warning">
+                ⚠ <strong>Localhost detected:</strong> Open page via network IP address (e.g. http://192.168.x.x:8000) so mobile phones can load the QR route.
+            </div>
+
+            <div class="form-group">
+                <label for="startInput">Start Point</label>
+                <input type="text" id="startInput" list="buildingList" placeholder="Choose or type start building" autocomplete="off">
+            </div>
+
+            <button type="button" class="swap-btn" id="swapBtn">⇅ Swap</button>
+
+            <div class="form-group">
+                <label for="destInput">Destination</label>
+                <input type="text" id="destInput" list="buildingList" placeholder="Choose or type destination building" autocomplete="off">
+            </div>
+
+            <datalist id="buildingList"></datalist>
+
+            <button id="generateRouteBtn" class="primary-btn">Generate Mobile Route</button>
+            
+            <div id="message"></div>
+
+            <div id="qrCodeContainer">
+                <p>Scan this QR code with your phone to start navigation on the 2D map.</p>
+                <div id="qrcode"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "";
+        const PUBLIC_URL = "";
+        const baseUrl = PUBLIC_URL || window.location.origin;
+
+        const navModal = document.getElementById("navModal");
+        const openNavBtn = document.getElementById("openNavBtn");
+        const closeNavBtn = document.getElementById("closeNavBtn");
+        
+        const startInput = document.getElementById("startInput");
+        const destInput = document.getElementById("destInput");
+        const button = document.getElementById("generateRouteBtn");
+        const swapBtn = document.getElementById("swapBtn");
+        const message = document.getElementById("message");
+        const qrContainer = document.getElementById("qrCodeContainer");
+        const qrBox = document.getElementById("qrcode");
+
+        let buildingNames = [];
+
+        // Check if running on localhost
+        if (!PUBLIC_URL && ["localhost", "127.0.0.1"].includes(window.location.hostname)) {
+            document.getElementById("warning").style.display = "block";
+        }
+
+        // Modal Controls
+        openNavBtn.addEventListener("click", () => navModal.classList.add("active"));
+        closeNavBtn.addEventListener("click", () => navModal.classList.remove("active"));
+        
+        // Close modal if user clicks outside card
+        navModal.addEventListener("click", (e) => {
+            if (e.target === navModal) navModal.classList.remove("active");
+        });
+
+        // Building Info Sidebar Listener (receives messaging from QGIS2threejs iframe if configured)
+        window.addEventListener("message", (event) => {
+            if (event.data && event.data.type === "BUILDING_SELECTED") {
+                document.getElementById("buildingTitle").textContent = event.data.name || "Building Info";
+                document.getElementById("buildingDescription").textContent = event.data.description || "No detailed description available.";
+                document.getElementById("buildingInfoSidebar").classList.remove("hidden");
+            }
+        });
+
+        document.getElementById("closeSidebarBtn").addEventListener("click", () => {
+            document.getElementById("buildingInfoSidebar").classList.add("hidden");
+        });
+
+        function showMessage(text, isError) {
+            message.textContent = text;
+            message.className = text ? (isError ? "error" : "success") : "";
+        }
+
+        // Fetch buildings list for autocomplete
+        fetch(API_BASE + "/api/search-buildings")
+            .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+            .then(names => {
+                buildingNames = names;
+                const list = document.getElementById("buildingList");
+                names.forEach(n => {
+                    const opt = document.createElement("option");
+                    opt.value = n;
+                    list.appendChild(opt);
+                });
+            })
+            .catch(() => showMessage("Could not load building database.", true));
+
+        // Swap locations
+        swapBtn.addEventListener("click", () => {
+            const temp = startInput.value;
+            startInput.value = destInput.value;
+            destInput.value = temp;
+        });
+
+        // Route Generation
+        button.addEventListener("click", async function () {
+            const start = startInput.value.trim();
+            const dest = destInput.value.trim();
+
+            qrContainer.style.display = "none";
+            qrBox.innerHTML = "";
+            showMessage("", false);
+
+            if (!start || !dest) { showMessage("Please fill in both points.", true); return; }
+            if (!buildingNames.includes(start) || !buildingNames.includes(dest)) {
+                showMessage("Please select valid buildings from the list.", true); return;
+            }
+            if (start === dest) { showMessage("Start and destination are identical.", true); return; }
+
+            button.disabled = true;
+            showMessage("Calculating route...", false);
+
+            try {
+                const url = API_BASE + "/api/route?start_name=" + encodeURIComponent(start) +
+                            "&dest_name=" + encodeURIComponent(dest);
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                if (!res.ok) { showMessage(data.detail || "No route found.", true); return; }
+
+                const info = data.features[0].properties;
+                showMessage("Route found: ~" + info.distance_m + " m (" + info.walk_minutes + " min walk)", false);
+
+                const mobileUrl = baseUrl + "/mobile-map.html?start=" + encodeURIComponent(start) +
+                                  "&dest=" + encodeURIComponent(dest);
+                
+                qrContainer.style.display = "block";
+                
+                new QRCode(qrBox, { 
+                    text: mobileUrl, 
+                    width: 170, 
+                    height: 170,
+                    colorDark: "#021B39",
+                    colorLight: "#FFFFFF",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            } catch (e) {
+                showMessage("Server connection failed.", true);
+            } finally {
+                button.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

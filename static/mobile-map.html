@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GeoNexus Navigation</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+
+    <style>
+        :root {
+            --navy: #021B39;
+            --dark-blue: #072A4A;
+            --cyan: #4DB6D9;
+            --teal: #2FC7A5;
+            --mint: #61D6B3;
+            --white: #F5F7FA;
+            --text: #17221d;
+            --muted: #6A7A89;
+            --danger: #b42318;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--navy);
+            color: var(--text);
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+            z-index: 1;
+        }
+
+        /* Top Navigation Header Banner */
+        .info-card {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .route-details {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .route-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--navy);
+        }
+
+        .route-meta {
+            display: flex;
+            gap: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--dark-blue);
+        }
+
+        .meta-tag {
+            background: rgba(47, 199, 165, 0.15);
+            color: #0d7059;
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+
+        .route-points {
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.4;
+        }
+
+        /* Bottom Floating Action Bar */
+        .bottom-bar {
+            position: absolute;
+            bottom: 24px;
+            left: 16px;
+            right: 16px;
+            z-index: 1000;
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: transform 0.1s ease;
+            text-align: center;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-end {
+            background: var(--danger);
+            color: #FFFFFF;
+        }
+
+        .btn-center {
+            background: var(--white);
+            color: var(--navy);
+            max-width: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        /* Loading & Status Overlay */
+        #status-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            background: #FFFFFF;
+            padding: 20px 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--navy);
+        }
+
+        .pulse-loader {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background-color: var(--teal);
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 1.2s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(0.8); opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="status-overlay">
+        <span class="pulse-loader"></span> Loading campus navigation...
+    </div>
+
+    <!-- Top Route Info Card -->
+    <div class="info-card" id="infoCard" style="display: none;">
+        <div class="route-details">
+            <div class="route-title">Walking Route</div>
+            <div class="route-meta">
+                <span class="meta-tag" id="walkTime">-- min</span>
+                <span class="meta-tag" id="walkDist">-- m</span>
+            </div>
+        </div>
+        <div class="route-points">
+            From: <strong id="startLabel">...</strong><br>
+            To: <strong id="destLabel">...</strong>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Bottom Controls -->
+    <div class="bottom-bar">
+        <button class="btn btn-center" id="recenterBtn" title="Recenter Route">🎯</button>
+        <button class="btn btn-end" id="endRouteBtn">End Routing</button>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+    <script>
+        const API_BASE = ""; 
+        const statusOverlay = document.getElementById("status-overlay");
+        const infoCard = document.getElementById("infoCard");
+
+        // Parse query params (e.g. ?start=BuildingA&dest=BuildingB)
+        const urlParams = new URLSearchParams(window.location.search);
+        const startName = urlParams.get("start");
+        const destName = urlParams.get("dest");
+
+        // Initialize Map
+        const map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false
+        }).setView([-25.7545, 28.2315], 17); // Default centered on Hatfield Campus area
+
+        // Dark/Clean basemap layer (CartoDB Positron)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            maxZoom: 20
+        }).addTo(map);
+
+        let routeLayer = null;
+
+        if (!startName || !destName) {
+            statusOverlay.innerHTML = "❌ Missing start or destination in URL.";
+        } else {
+            document.getElementById("startLabel").textContent = startName;
+            document.getElementById("destLabel").textContent = destName;
+            fetchRoute(startName, destName);
+        }
+
+        async function fetchRoute(start, dest) {
+            try {
+                const response = await fetch(`${API_BASE}/api/route?start_name=${encodeURIComponent(start)}&dest_name=${encodeURIComponent(dest)}`);
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || "Unable to retrieve route.");
+                }
+
+                const geojsonData = await response.json();
+                renderRoute(geojsonData);
+                statusOverlay.style.display = "none";
+                infoCard.style.display = "block";
+
+            } catch (error) {
+                statusOverlay.innerHTML = `❌ ${error.message}`;
+            }
+        }
+
+        function renderRoute(geoJson) {
+            const feature = geoJson.features[0];
+            const props = feature.properties;
+
+            // Update Header Stats
+            document.getElementById("walkTime").textContent = `${props.walk_minutes} min`;
+            document.getElementById("walkDist").textContent = `${props.distance_m} m`;
+
+            // Draw Path Line
+            routeLayer = L.geoJSON(geoJson, {
+                style: {
+                    color: '#2FC7A5',
+                    weight: 6,
+                    opacity: 0.9,
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                }
+            }).addTo(map);
+
+            // Fit map bounds to show full route
+            const bounds = routeLayer.getBounds();
+            map.fitBounds(bounds, { padding: [80, 80] });
+
+            // Extract coordinates for Start/End Markers
+            const coords = feature.geometry.coordinates;
+            let startPoint, endPoint;
+
+            if (feature.geometry.type === "LineString") {
+                startPoint = coords[0];
+                endPoint = coords[coords.length - 1];
+            } else if (feature.geometry.type === "MultiLineString") {
+                startPoint = coords[0][0];
+                const lastLine = coords[coords.length - 1];
+                endPoint = lastLine[lastLine.length - 1];
+            }
+
+            if (startPoint && endPoint) {
+                // Leaflet expects [lat, lng] whereas GeoJSON uses [lng, lat]
+                addCustomMarker([startPoint[1], startPoint[0]], "Start", "#021B39");
+                addCustomMarker([endPoint[1], endPoint[0]], "Destination", "#b42318");
+            }
+        }
+
+        function addCustomMarker(latLng, title, color) {
+            const markerHtml = `<div style="
+                background-color: ${color};
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                border: 3px solid white;
+                box-shadow: 0 0 10px rgba(0,0,0,0.4);
+            "></div>`;
+
+            const icon = L.divIcon({
+                html: markerHtml,
+                className: '',
+                iconSize: [22, 22],
+                iconAnchor: [11, 11]
+            });
+
+            L.marker(latLng, { icon: icon }).addTo(map).bindPopup(`<b>${title}</b>`);
+        }
+
+        // Recenter button
+        document.getElementById("recenterBtn").addEventListener("click", () => {
+            if (routeLayer) {
+                map.fitBounds(routeLayer.getBounds(), { padding: [80, 80] });
+            }
+        });
+
+        // End Routing button - closes tab/window or returns home
+        document.getElementById("endRouteBtn").addEventListener("click", () => {
+            if (window.history.length > 1) {
+                window.history.back();
+            } else {
+                window.close();
+                // Fallback if browser prevents auto-close
+                window.location.href = "/";
+            }
+        });
+    </script>
+</body>
+</html>
